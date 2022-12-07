@@ -1,10 +1,11 @@
 use clap::Parser;
 use nom::branch::alt;
 use nom::combinator::value;
-use nom::character::complete::{char, line_ending, u64};
+use nom::character::complete::{alpha0, char, line_ending, u64};
 use nom::multi::{many1,separated_list1};
 use nom::sequence::{separated_pair,terminated};
 use nom::error::VerboseError;
+use std::collections::HashSet;
 use std::fs;
 
 #[derive(Parser)]
@@ -125,11 +126,80 @@ fn day2(input_file: String) {
     println!("Total: {}", new_game_score + new_selection_score);
 }
 
+fn day3(input_file: String) {
+    let input_string = fs::read_to_string(input_file).unwrap();
+    let mut parser = many1(terminated(alpha0, line_ending::<_,VerboseError<_>>));
+    let rucksacks: Vec<(&str,&str)> =
+         parser(input_string.as_str())
+         .unwrap()
+         .1
+         .iter()
+         .map(|sack: &&str| { (&sack[0..(sack.len() / 2)], &sack[(sack.len() / 2)..sack.len()]) })
+         .collect();
+    let find_duplicate = |entry: &(&str, &str)| {
+      let left: HashSet<char> = HashSet::from_iter(entry.0.chars());
+      let right: HashSet<char> = HashSet::from_iter(entry.1.chars());
+      left.intersection(&right).next().unwrap().clone()
+    };
+    let duplicates: Vec<char> = rucksacks.iter().map(find_duplicate).collect();
+    let to_priority = |item: &char| {
+        let priority = 
+            if item.clone() as u64 - ('A' as u64) < 27 {
+                item.clone() as u64 - ('A' as u64) + 27
+            } else {
+                item.clone() as u64 - ('a' as u64) + 1
+            };
+        println!("Item: {item}");
+        println!("Priority: {priority}");
+        priority
+    };
+    println!("Sum of duplicate priorities: {}", duplicates.iter().map(to_priority).sum::<u64>());
+    let firsts = rucksacks.iter().step_by(3);
+    let seconds = rucksacks.iter().skip(1).step_by(3);
+    let thirds = rucksacks.iter().skip(2).step_by(3);
+    let groups = firsts.zip(seconds).zip(thirds).map(|item| { (item.0.0, item.0.1, item.1) });
+    let find_badge = |entry: (&(&str,&str), &(&str,&str), &(&str,&str))| {
+        let first: HashSet<char> = HashSet::from_iter(entry.0.0.chars().chain(entry.0.1.chars()));
+        let second: HashSet<char> = HashSet::from_iter(entry.1.0.chars().chain(entry.1.1.chars()));
+        let third: HashSet<char> = HashSet::from_iter(entry.2.0.chars().chain(entry.2.1.chars()));
+        first.intersection(&second).copied().collect::<HashSet<_>>().intersection(&third).next().unwrap().clone()
+    };
+    let badges: Vec<char> = groups.map(find_badge).collect();
+    println!("Sum of badge priorities: {}", badges.iter().map(to_priority).sum::<u64>());
+}
+
+fn day4(input_file: String) {
+    let input_string = fs::read_to_string(input_file).unwrap();
+    let mut parser = separated_list1(
+        line_ending::<_,VerboseError<_>>,
+        separated_pair(
+            separated_pair(u64, char('-'), u64),
+            char(','),
+            separated_pair(u64, char('-'), u64),
+        )
+    );
+    let input: Vec<((u64,u64),(u64,u64))> = parser(input_string.as_str()).unwrap().1;
+    let fully_overlaps = |entry: &&((u64,u64),(u64,u64))| {
+        ((entry.0.0 <= entry.1.0) && (entry.0.1 >= entry.1.1))
+     || ((entry.0.0 >= entry.1.0) && (entry.0.1 <= entry.1.1))
+    };
+    println!("Fully overlaps: {}", input.iter().filter(fully_overlaps).count());
+    let overlaps = |entry: &&((u64,u64),(u64,u64))| {
+        ((entry.0.0 <= entry.1.0) && (entry.1.0 <= entry.0.1))
+     || ((entry.0.0 <= entry.1.1) && (entry.1.1 <= entry.0.1))
+     || ((entry.1.0 <= entry.0.0) && (entry.0.0 <= entry.1.1))
+     || ((entry.1.0 <= entry.0.1) && (entry.0.1 <= entry.1.1))
+    };
+    println!("Overlaps: {}", input.iter().filter(overlaps).count())
+}
+
 fn main() {
     let args = Args::parse();
     match args.day {
         Some(1) => day1(args.input),
         Some(2) => day2(args.input),
+        Some(3) => day3(args.input),
+        Some(4) => day4(args.input),
         Some(_) => println!("Invalid day selected"),
         None => println!("No day selected"),
     }
